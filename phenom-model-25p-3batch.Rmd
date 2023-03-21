@@ -1,0 +1,559 @@
+r---
+title: "phenom-model-25p-3batch"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loadpackages}
+library(minpack.lm)
+library(ggplot2)
+library(tidyverse)
+library(knitr)
+library(Stat2Data)
+library(growthcurver)
+library(epifitter)
+library(nlstools)
+library(nlsMicrobio)
+library(easynls)
+library(numDeriv)
+library(readr)
+library(hrbrthemes)
+library(viridis)
+library(plotly)
+library(gridExtra)
+```
+
+```{r}
+model_output <- read_csv("~/Desktop/data+/3_25_data.csv")
+model_input <- read_csv("~/Desktop/data+/3_25.csv")
+
+model_output <- model_output[,-1]
+```
+
+
+```{r}
+model_25_test <- model_output[1:1,]
+
+model_25_test <- model_25_test %>%
+  select(-c(name, condition))
+
+model_25_test_flip <- as.data.frame(t(model_25_test))
+
+new_col = c("Mean")
+colnames(model_25_test_flip) = new_col
+add_time = c(model_input$Time)
+model_25_test_flip['Time'] = rep(add_time, 2)
+```
+
+```{r pyrE-glu01}
+mean_data_25 <- model_25_test_flip %>%
+  slice(1:25)
+
+sd_data_25 <- model_25_test_flip %>%
+  slice(26:50)
+new_col = c("std", "Time")
+colnames(sd_data_25) = new_col
+
+graph_data_25 <- left_join(mean_data_25, sd_data_25)
+
+ggplot(graph_data_25, aes(x = Time, y = Mean)) +
+  geom_ribbon(aes(ymin = Mean - std*2, ymax = Mean + std*2), alpha = 0.5) +
+  geom_line() +
+  geom_point(data = model_input, mapping = aes(x = Time, y = Glu001_pyrE_3), color = "red") +
+  geom_point(data = model_input, mapping = aes(x = Time, y = Glu001_pyrE_2), color = "blue") +
+  geom_point(data = model_input, mapping = aes(x = Time, y = Glu001_pyrE_1), color = "purple") +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = get(names(model_input)[16]))
+```
+
+```{r}
+#logistic comparison
+logistic_mtest <- model_input %>%
+  select(Time, Glu001_pyrE_3)
+
+model_gom = nlsfit(logistic_mtest, model = 7, start = c(a = 0.6, b = 0.08, c = 0.2))
+model_gom
+nlsplot(data.frame(logistic_mtest), model = 7, start = c(a = 0.6, b = 0.08, c = 0.2), xlab = "Time", ylab = "Growth", position = 1)
+```
+
+```{r}
+model_25_test2 <- model_output[3,]
+
+model_25_test2 <- model_25_test2 %>%
+  select(-c(name, condition))
+
+model_25_test2_flip <- as.data.frame(t(model_25_test2))
+
+new_col = c("Mean")
+colnames(model_25_test2_flip) = new_col
+add_time = c(model_input$Time)
+model_25_test2_flip['Time'] = rep(add_time, 2)
+```
+
+```{r trmB-glu01}
+mean_data_25 <- model_25_test2_flip %>%
+  slice(1:25)
+
+sd_data_25 <- model_25_test2_flip %>%
+  slice(26:50)
+new_col = c("std", "Time")
+colnames(sd_data_25) = new_col
+
+graph_data_25 <- left_join(mean_data_25, sd_data_25)
+
+ggplot(graph_data_25, aes(x = Time, y = Mean)) +
+  geom_ribbon(aes(ymin = Mean - std*2, ymax = Mean + std*2), alpha = 0.3) +
+  geom_line() +
+  geom_point(data = model_input, mapping = aes(x = Time, y = Glu001_trmB_3), color = "red") +
+  geom_point(data = model_input, mapping = aes(x = Time, y = Glu001_trmB_2), color = "blue") +
+  geom_point(data = model_input, mapping = aes(x = Time, y = Glu001_trmB_1), color = "purple") +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Gaussian processes model")
+```
+```{r}
+#logistic comparison
+logistic_mtest <- model_input %>%
+  select(Time, Glu001_trmB_3)
+
+model_log = nlsfit(logistic_mtest, model = 7, start = c(a = 0.3, b = 0.08, c = 0.12))
+model_log
+nlsplot(data.frame(logistic_mtest), model = 7, start = c(a = 0.3, b = 0.08, c = 0.12), xlab = "Time", ylab = "Growth", position = 1) 
+```
+```{r}
+#gompertz comparison
+logistic_mtest <- model_input %>%
+  select(Time, Glu001_trmB_3)
+
+model_gom = nlsfit(logistic_mtest, model = 10, start = c(a = 1.2, b = 0.08, c = 0.2))
+model_gom
+nlsplot(data.frame(logistic_mtest), model = 10, start = c(a = 1.2, b = 0.08, c = 0.2), xlab = "Time", ylab = "Growth", position = 1) 
+```
+
+
+```{r}
+model_25_test2 <- model_output[11,]
+
+model_25_test2 <- model_25_test2 %>%
+  select(-c(name, condition))
+
+model_25_test2_flip <- as.data.frame(t(model_25_test2))
+
+new_col = c("Mean")
+colnames(model_25_test2_flip) = new_col
+add_time = c(model_input$Time)
+model_25_test2_flip['Time'] = rep(add_time, 2)
+```
+
+```{r trmB-noglu}
+mean_data_25 <- model_25_test2_flip %>%
+  slice(1:25)
+
+sd_data_25 <- model_25_test2_flip %>%
+  slice(26:50)
+new_col = c("std", "Time")
+colnames(sd_data_25) = new_col
+
+graph_data_25 <- left_join(mean_data_25, sd_data_25)
+
+ggplot(graph_data_25, aes(x = Time, y = Mean)) +
+  geom_ribbon(aes(ymin = Mean - std, ymax = Mean + std), alpha = 0.3) +
+  geom_line() +
+  geom_point(data = model_input, mapping = aes(x = Time, y = noGlu_trmB_3), color = "red") +
+  geom_point(data = model_input, mapping = aes(x = Time, y = noGlu_trmB_2), color = "blue") +
+  geom_point(data = model_input, mapping = aes(x = Time, y = noGlu_trmB_1), color = "purple") +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Gaussian processes model")
+```
+
+```{r}
+od_data <- model_output %>%
+  slice(5:8)
+
+od_data <- od_data %>%
+  select(-condition)
+
+od_data_flip <- as.data.frame(t(od_data))
+```
+
+```{r}
+new_col = c(od_data_flip[1, ][])
+colnames(od_data_flip) = new_col
+od_data_flip <- od_data_flip[-1,]
+
+od_data_flip <- od_data_flip %>% mutate_if(is.character,as.numeric)
+
+od_data_flip <- cbind(rownames(od_data_flip), data.frame(od_data_flip, row.names=NULL))
+```
+
+```{r}
+add_time = c(model_input$Time)
+od_data_flip <- od_data_flip %>%
+  mutate(Time = rep(add_time,2))
+
+od_mean_data <- od_data_flip %>%
+  slice(1:25)
+
+od_sd_data <- od_data_flip %>%
+  slice(26:50)
+
+od_sd_data <- od_sd_data[,-1]
+
+od_new_col = c("sd_pyrE", "sd_tbsP", "sd_trmB", "sd_trmBtbsP", "Time")
+colnames(od_sd_data) <- od_new_col
+
+od_graph <- left_join(od_mean_data, od_sd_data)
+```
+
+```{r}
+od_graph <- od_graph %>%
+  mutate(diff = pyrE - pyrE,
+         tbsp_diff = tbsP - pyrE,
+         tbsp_sd = sqrt(sd_tbsP^2 + sd_pyrE^2),
+         trmb_diff = trmB - pyrE,
+         trmb_sd = sqrt(sd_trmB^2 + sd_pyrE^2),
+         trmbtbsp_diff = trmBtbsP - pyrE,
+         trmbtbsp_sd = sqrt(sd_trmBtbsP^2 + sd_trmBtbsP^2))
+```
+
+```{r}
+g1 <- ggplot(od_graph, aes(x = Time, y = tbsp_diff)) +
+  geom_ribbon(aes(ymin = tbsp_diff - tbsp_sd*2, ymax = tbsp_diff + tbsp_sd*2), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.09,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+  OD tbsP-Glu05") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r}
+g2 <- ggplot(od_graph, aes(x = Time, y = trmb_diff)) +
+  geom_ribbon(aes(ymin = trmb_diff - trmb_sd*2, ymax = trmb_diff + trmb_sd*2), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.09,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+ OD trmB-Glu05") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r}
+g3 <- ggplot(od_graph, aes(x = Time, y = trmbtbsp_diff)) +
+  geom_ribbon(aes(ymin = trmbtbsp_diff - trmbtbsp_sd*2, ymax = trmbtbsp_diff + trmbtbsp_sd*2), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.09,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+ OD trmB-tbsP-Glu05") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r fig.width=10}
+grid.arrange(g1, g2, g3, nrow = 1)
+```
+
+```{r}
+od_data <- model_output %>%
+  slice(1:4)
+
+od_data <- od_data %>%
+  select(-condition)
+
+od_data_flip <- as.data.frame(t(od_data))
+
+new_col = c(od_data_flip[1, ][])
+colnames(od_data_flip) = new_col
+od_data_flip <- od_data_flip[-1,]
+
+od_data_flip <- od_data_flip %>% mutate_if(is.character,as.numeric)
+
+od_data_flip <- cbind(rownames(od_data_flip), data.frame(od_data_flip, row.names=NULL))
+```
+
+```{r}
+add_time = c(model_input$Time)
+od_data_flip <- od_data_flip %>%
+  mutate(Time = rep(add_time,2))
+
+od_mean_data <- od_data_flip %>%
+  slice(1:25)
+
+od_sd_data <- od_data_flip %>%
+  slice(26:50)
+
+od_sd_data <- od_sd_data[,-1]
+
+od_new_col = c("sd_pyrE", "sd_tbsP", "sd_trmB", "sd_trmBtbsP", "Time")
+colnames(od_sd_data) <- od_new_col
+
+od_graph <- left_join(od_mean_data, od_sd_data)
+```
+
+
+```{r}
+od_graph <- od_graph %>%
+  mutate(diff = pyrE - pyrE,
+         tbsp_diff = tbsP - pyrE,
+         tbsp_sd = sqrt(sd_tbsP^2 + sd_pyrE^2),
+         trmb_diff = trmB - pyrE,
+         trmb_sd = sqrt(sd_trmB^2 + sd_pyrE^2),
+         trmbtbsp_diff = trmBtbsP - pyrE,
+         trmbtbsp_sd = sqrt(sd_trmBtbsP^2 + sd_trmBtbsP^2))
+```
+
+```{r}
+g1 <- ggplot(od_graph, aes(x = Time, y = tbsp_diff)) +
+  geom_ribbon(aes(ymin = tbsp_diff - tbsp_sd*2, ymax = tbsp_diff + tbsp_sd*2), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.5,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+  OD tbsP-Glu01") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r}
+g2 <- ggplot(od_graph, aes(x = Time, y = trmb_diff)) +
+  geom_ribbon(aes(ymin = trmb_diff - trmb_sd*2, ymax = trmb_diff + trmb_sd*2), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.5,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+ OD trmB-Glu01") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r}
+g3 <- ggplot(od_graph, aes(x = Time, y = trmbtbsp_diff)) +
+  geom_ribbon(aes(ymin = trmbtbsp_diff - trmbtbsp_sd*2, ymax = trmbtbsp_diff + trmbtbsp_sd*2), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.5,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+ OD trmB-tbsP-Glu01") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r fig.width=10}
+grid.arrange(g1, g2, g3, nrow = 1)
+```
+
+```{r}
+od_data <- model_output %>%
+  slice(9:12)
+
+od_data <- od_data %>%
+  select(-condition)
+
+od_data_flip <- as.data.frame(t(od_data))
+
+new_col = c(od_data_flip[1, ][])
+colnames(od_data_flip) = new_col
+od_data_flip <- od_data_flip[-1,]
+
+od_data_flip <- od_data_flip %>% mutate_if(is.character,as.numeric)
+
+od_data_flip <- cbind(rownames(od_data_flip), data.frame(od_data_flip, row.names=NULL))
+```
+
+```{r}
+add_time = c(model_input$Time)
+od_data_flip <- od_data_flip %>%
+  mutate(Time = rep(add_time,2))
+
+od_mean_data <- od_data_flip %>%
+  slice(1:25)
+
+od_sd_data <- od_data_flip %>%
+  slice(26:50)
+
+od_sd_data <- od_sd_data[,-1]
+
+od_new_col = c("sd_pyrE", "sd_tbsP", "sd_trmB", "sd_trmBtbsP", "Time")
+colnames(od_sd_data) <- od_new_col
+
+od_graph <- left_join(od_mean_data, od_sd_data)
+```
+
+
+```{r}
+od_graph <- od_graph %>%
+  mutate(diff = pyrE - pyrE,
+         tbsp_diff = tbsP - pyrE,
+         tbsp_sd = sqrt(sd_tbsP^2 + sd_pyrE^2),
+         trmb_diff = trmB - pyrE,
+         trmb_sd = sqrt(sd_trmB^2 + sd_pyrE^2),
+         trmbtbsp_diff = trmBtbsP - pyrE,
+         trmbtbsp_sd = sqrt(sd_trmBtbsP^2 + sd_trmBtbsP^2))
+```
+
+```{r}
+g1 <- ggplot(od_graph, aes(x = Time, y = tbsp_diff)) +
+  geom_ribbon(aes(ymin = tbsp_diff - tbsp_sd*2, ymax = tbsp_diff + tbsp_sd*2), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.5,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+  OD tbsP-noGlu") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r}
+g2 <- ggplot(od_graph, aes(x = Time, y = trmb_diff)) +
+  geom_ribbon(aes(ymin = trmb_diff - trmb_sd*2, ymax = trmb_diff + trmb_sd*2), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.5,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+ OD trmB-noGlu") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r}
+g3 <- ggplot(od_graph, aes(x = Time, y = trmbtbsp_diff)) +
+  geom_ribbon(aes(ymin = trmbtbsp_diff - trmbtbsp_sd*2, ymax = trmbtbsp_diff + trmbtbsp_sd*2), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.5,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+ OD trmB-tbsP-noGlu") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r fig.width=10}
+grid.arrange(g1, g2, g3, nrow = 1)
+```
+
+```{r}
+od_data <- model_output %>%
+  slice(1:4)
+
+od_data <- od_data %>%
+  select(-condition)
+
+od_data_flip <- as.data.frame(t(od_data))
+
+new_col = c(od_data_flip[1, ][])
+colnames(od_data_flip) = new_col
+od_data_flip <- od_data_flip[-1,]
+
+od_data_flip <- od_data_flip %>% mutate_if(is.character,as.numeric)
+
+od_data_flip <- cbind(rownames(od_data_flip), data.frame(od_data_flip, row.names=NULL))
+```
+
+```{r}
+add_time = c(model_input$Time)
+od_data_flip <- od_data_flip %>%
+  mutate(Time = rep(add_time,2))
+
+od_mean_data <- od_data_flip %>%
+  slice(1:25)
+
+od_sd_data <- od_data_flip %>%
+  slice(26:50)
+
+od_sd_data <- od_sd_data[,-1]
+
+od_new_col = c("sd_pyrE", "sd_tbsP", "sd_trmB", "sd_trmBtbsP", "Time")
+colnames(od_sd_data) <- od_new_col
+
+od_graph <- left_join(od_mean_data, od_sd_data)
+```
+
+
+```{r}
+od_graph <- od_graph %>%
+  mutate(diff = pyrE - pyrE,
+         tbsp_diff = tbsP - pyrE,
+         tbsp_sd = sqrt(sd_tbsP^2 + sd_pyrE^2),
+         trmb_diff = trmB - pyrE,
+         trmb_sd = sqrt(sd_trmB^2 + sd_pyrE^2),
+         trmbtbsp_diff = trmBtbsP - pyrE,
+         trmbtbsp_sd = sqrt(sd_trmBtbsP^2 + sd_trmBtbsP^2))
+```
+
+```{r}
+g1 <- ggplot(od_graph, aes(x = Time, y = tbsp_diff)) +
+  geom_ribbon(aes(ymin = tbsp_diff - tbsp_sd, ymax = tbsp_diff + tbsp_sd), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.5,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+  OD tbsP-Glu01") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r}
+g2 <- ggplot(od_graph, aes(x = Time, y = trmb_diff)) +
+  geom_ribbon(aes(ymin = trmb_diff - trmb_sd, ymax = trmb_diff + trmb_sd), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.5,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+ OD trmB-Glu01") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r}
+g3 <- ggplot(od_graph, aes(x = Time, y = trmbtbsp_diff)) +
+  geom_ribbon(aes(ymin = trmbtbsp_diff - trmbtbsp_sd, ymax = trmbtbsp_diff + trmbtbsp_sd), alpha = 0.3) +
+  geom_line(color = "blue") +
+  ylim(-0.5,0.02) +
+  labs(x = "Time",
+       y = "log(OD)",
+       title = "Functional difference 
+ OD trmB-tbsP-Glu01") +
+  geom_line(data = od_graph, mapping = aes(x = Time, y = diff), size = 2)
+```
+
+```{r fig.width=10}
+grid.arrange(g1, g2, g3, nrow = 1)
+```
+
+
+```{r}
+od_graph_heat <- od_graph %>%
+  select(Time, contains("diff")) %>%
+  select(-diff)
+
+#convert column values into row names
+od_graph_heat <- data.frame(od_graph_heat[,-1, drop = FALSE], row.names = od_graph[,1])
+
+od_graph_heat <- as.data.frame(t(od_graph_heat))
+
+hclust_rows <- as.dendrogram(hclust(dist(od_graph_heat)))
+
+heatmap(as.matrix(od_graph_heat), Rowv = hclust_rows, Colv = NA)
+
+library(gplots)
+
+heatmap.2(as.matrix(od_graph_heat), Colv = NA,
+           key.xlab="Time", key=TRUE, symkey=FALSE, margins = c(5, 5),
+          density.info="none", trace="none")
+```
+
+```{r}
+heatmap.2(as.matrix(od_graph_heat), Colv = NA,
+           key.xlab = expression(paste("OD",Delta)), key=TRUE, symkey=FALSE, adjRow = c(0.2,NA),
+          cexRow = 0.8, main = "Heatmap - Altered Glucose Level", xlab = "Time", 
+          ylab = "Strains", density.info="none", trace="none")
+```
+

@@ -1,0 +1,124 @@
+---
+title: "data-wrangle"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loadpackages}
+library(minpack.lm)
+library(ggplot2)
+library(tidyverse)
+library(knitr)
+library(Stat2Data)
+library(growthcurver)
+library(epifitter)
+library(nlstools)
+library(nlsMicrobio)
+library(easynls)
+library(numDeriv)
+```
+
+```{r import-data}
+library(readxl)
+trmb_data <- read_excel("~/Desktop/data+/20181214_trmB_all_data.xlsx")
+trmb_meta <- read_excel("~/Desktop/data+/20181214_meta_trmB_all.xlsx")
+```
+
+trmb_data and trmb_meta are the two original data files. Each variable number in trmb_data corresponds to one value in trmb_meta. The following data wrangling code combines the two graphs and outputs a single more straightforward dataset for data analysis and visualizations. Ideally, trmb_data and trmb_meta can be any experimental data with any number of independent variables as long as the experiment has three technical and biological replicates.
+
+```{r rearrangement-and-indexing}
+trmb_rearranged <- trmb_meta %>%
+  drop_na(name) %>%
+  group_by(condition, media, name, biorep, techrep, variable) %>%
+  count()
+
+trmb_rearranged <- trmb_rearranged %>%
+  select(!n)
+
+trmb_rearranged$index <- 1:nrow(trmb_rearranged)
+
+sorted_by_variable <- trmb_rearranged %>%
+  mutate(variable = as.numeric(variable)) %>%
+  arrange(variable)
+
+trmb_sorted_merge <- sorted_by_variable %>%
+  group_by(variable, index) %>%
+  select(variable, index)
+```
+
+```{r changed-name}
+trmb_rearranged %>%
+  group_by(condition, media, name) %>%
+  count()
+
+trmb_rearranged <- trmb_rearranged %>% 
+  add_column(new_name = NA)
+
+renamed_meta <- unite(trmb_rearranged, condition, media, name, 
+                      col = "new_name", sep = "_")
+
+#renamed_meta <- renamed_meta %>%
+  #mutate(number = 3*biorep + techrep - 3)
+
+renamed_meta <- renamed_meta %>%
+  mutate(number = ifelse(is.na(biorep) == FALSE, 3*biorep + techrep -3, index))
+
+renamed_meta <- unite(renamed_meta, new_name, number, 
+                      col = "new_name", sep = "_")
+```
+
+```{r alter-data-file-for-merging}
+trmb_flip <- as.data.frame(t(trmb_data))
+index <- c(0)
+index <- c(index, trmb_sorted_merge$index)
+trmb_flip['index'] <- index
+
+trmb_flip <- trmb_flip %>%
+  arrange(index) %>%
+  select (!index)
+
+renamed <- c(0)
+renamed <- c(renamed, renamed_meta$new_name)
+trmb_flip['renamed'] <- renamed
+
+trmb_df <- as.data.frame(t(trmb_flip))
+```
+
+```{r rename-column-for-meta}
+new_col = c("Time")
+new_col = c("Time", trmb_df[nrow(trmb_df), ][-1])
+colnames(trmb_df) = new_col
+
+n<-dim(trmb_df)[1]
+trmb_df<-trmb_df[1:(n-1),]
+```
+
+```{r character-to-numeric}
+trmb_df <- trmb_df %>% mutate_if(is.character,as.numeric)
+```
+
+```{r display}
+trmb_df
+```
+
+
+```{r reorganize}
+#control group - meta
+renamed_meta_blank <- renamed_meta %>%
+  filter(is.na(biorep))
+
+#control group - data
+trmb_data_blank <- trmb_df %>%
+  select(Time, contains("blank"))
+
+#experimental group - meta
+renamed_meta_not_blank <- renamed_meta %>%
+  filter(!is.na(biorep))
+
+#experimental group - data
+trmb_data_not_blank <- trmb_df %>%
+  select(!contains("blank"))
+```

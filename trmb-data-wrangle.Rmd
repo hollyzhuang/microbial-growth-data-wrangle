@@ -1,0 +1,414 @@
+---
+title: "trmb-data-wrangle"
+output: html_document
+---
+
+```{r setup, include = FALSE, echo = FALSE, warning = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loadpackages}
+library(minpack.lm)
+library(ggplot2)
+library(tidyverse)
+library(knitr)
+library(Stat2Data)
+library(growthcurver)
+library(epifitter)
+library(nlstools)
+library(nlsMicrobio)
+library(easynls)
+library(numDeriv)
+```
+
+```{r import-data}
+library(readxl)
+trmb_data <- read_excel("~/Desktop/data+/20181214_trmB_all_data.xlsx")
+trmb_meta <- read_excel("~/Desktop/data+/20181214_meta_trmB_all.xlsx")
+```
+
+```{r rearrangement-and-indexing}
+trmb_rearranged <- trmb_meta %>%
+  drop_na(name) %>%
+  group_by(condition, media, name, biorep, techrep, variable) %>%
+  count()
+
+trmb_rearranged <- trmb_rearranged %>%
+  select(!n)
+
+trmb_rearranged$index <- 1:nrow(trmb_rearranged)
+
+sorted_by_variable <- trmb_rearranged %>%
+  mutate(variable = as.numeric(variable)) %>%
+  arrange(variable)
+
+trmb_sorted_merge <- sorted_by_variable %>%
+  group_by(variable, index) %>%
+  select(variable, index)
+```
+
+```{r changed-name}
+trmb_rearranged %>%
+  group_by(condition, media, name) %>%
+  count()
+
+trmb_rearranged <- trmb_rearranged %>% 
+  add_column(new_name = NA)
+
+renamed_meta <- unite(trmb_rearranged, condition, media, name, 
+                      col = "new_name", sep = "_")
+
+#renamed_meta <- renamed_meta %>%
+  #mutate(number = 3*biorep + techrep - 3)
+
+renamed_meta <- renamed_meta %>%
+  mutate(number = ifelse(is.na(biorep) == FALSE, 3*biorep + techrep -3, index))
+
+renamed_meta <- unite(renamed_meta, new_name, number, 
+                      col = "new_name", sep = "_")
+
+output <- trmb_rearranged %>%
+  group_by(condition, media, name) %>%
+  count() %>%
+  filter(name != "blank")
+```
+
+```{r alter-data-file-for-merging}
+trmb_flip <- as.data.frame(t(trmb_data))
+index <- c(0)
+index <- c(index, trmb_sorted_merge$index)
+trmb_flip['index'] <- index
+
+trmb_flip <- trmb_flip %>%
+  arrange(index) %>%
+  select (!index)
+
+renamed <- c(0)
+renamed <- c(renamed, renamed_meta$new_name)
+trmb_flip['renamed'] <- renamed
+
+trmb_df <- as.data.frame(t(trmb_flip))
+```
+
+```{r rename-column-for-meta}
+new_col = c("Time")
+new_col = c("Time", trmb_df[nrow(trmb_df), ][-1])
+colnames(trmb_df) = new_col
+
+n<-dim(trmb_df)[1]
+trmb_df<-trmb_df[1:(n-1),]
+```
+
+```{r character-to-numeric}
+trmb_df <- trmb_df %>% mutate_if(is.character,as.numeric)
+```
+
+```{r reorganize}
+#control group - meta
+renamed_meta_blank <- renamed_meta %>%
+  filter(is.na(biorep))
+
+#control group - data
+trmb_data_blank <- trmb_df %>%
+  select(Time, contains("blank"))
+
+#experimental group - meta
+renamed_meta_not_blank <- renamed_meta %>%
+  filter(!is.na(biorep))
+
+#experimental group - data
+trmb_data_not_blank <- trmb_df %>%
+  select(!contains("blank"))
+```
+
+```{r average-techrep}
+averageDataSet <- function(datadf){
+  x = 2
+  new_data <- data.frame(datadf$Time)
+  colnames(new_data) = "Time"
+  while(x <= ncol(datadf)){
+    y = x
+    if(grepl("blank", colnames(datadf)[y], fixed = TRUE)){
+      while(grepl("blank", colnames(datadf)[x], fixed = TRUE) & x <= ncol(datadf)){
+        x <- x+1
+        }
+      tempS <- colnames(datadf)[x-1]
+      new_data[tempS] = rowMeans(datadf[ , y:(x-1)], na.rm=TRUE)
+      }
+    else{
+      valNum <- (strtoi(str_sub(colnames(datadf)[x], -1)) + 2)/3
+      tempS <- paste(str_sub(colnames(datadf)[x], 0, 
+                             nchar(colnames(datadf)[x]) - 1),
+                             as.character(valNum), sep="")
+      new_data[tempS] = rowMeans(datadf[ , c(x, x+1, x+2)], na.rm=TRUE)
+      x <- x+3
+      }
+    }
+  return(new_data)
+  }
+
+ave_techrep_data <- averageDataSet(trmb_df)
+```
+
+```{r function-calculate-log}
+logdataset <- function(datadf){
+  x = 2
+  new_data <- data.frame(datadf$Time)
+  colnames(new_data) = "Time"
+  while(x <= ncol(datadf)){
+    new_col <- colnames(datadf)[x]
+    base_val = datadf[1, x]
+    new_data[new_col] = log(datadf[, x] / base_val)
+    x <- x+1
+  }
+  return(new_data)
+}
+
+log_trmb_df_ave <- logdataset(ave_techrep_data)
+```
+
+```{r graph-glucose-changed, fig.width = 9}
+glu_altered <- trmb_rearranged %>%
+  filter(name == "_trmB" | name == "parent")
+
+glu_altered_data <- log_trmb_df_ave %>% 
+  select(Time, contains(c("HvCa+ura50__trmB", "HvCa+ura50_parent")))
+
+glu_altered_graph <- pivot_longer(glu_altered_data, 
+                                  cols = 2:(ncol(glu_altered_data)), 
+                                  names_to ="type",
+                                  values_to = "growth")
+
+glu_altered_graph['name'] = str_sub(glu_altered_graph$type, 1, -3)
+
+ggplot(glu_altered_graph, aes(x = Time, y = growth, color = name)) +
+  geom_point(size = 2)
+```
+
+```{r fig.width = 10}
+comp1 <- log_trmb_df_ave %>% 
+  select(Time, `glu01_HvCa+ura50+nov10__trmB+p_1`, 
+         `glu01_HvCa+ura50+nov10__trmB+p_2`, 
+         `glu01_HvCa+ura50+nov10__trmB+p_3`, 
+         `glu01_HvCa+ura50+nov10_parent+p_1`, 
+         `glu01_HvCa+ura50+nov10_parent+p_2`, 
+         `glu01_HvCa+ura50+nov10_parent+p_3`, 
+         `NA_HvCa+ura50+nov10__trmB+p_1`, 
+         `NA_HvCa+ura50+nov10__trmB+p_2`, 
+         `NA_HvCa+ura50+nov10__trmB+p_3`, 
+         `NA_HvCa+ura50+nov10_parent+p_1`, 
+         `NA_HvCa+ura50+nov10_parent+p_2`, 
+         `NA_HvCa+ura50+nov10_parent+p_3`)
+
+comp1_graph <- pivot_longer(comp1, 
+                            cols = 2:(ncol(comp1)), 
+                            names_to ="type",
+                            values_to = "growth")
+
+comp1_graph['name'] = str_sub(comp1_graph$type, 1, -3)
+
+ggplot(comp1_graph, aes(x = Time, y = growth, color = name)) +
+  geom_point(size = 2)
+```
+
+```{r fig.width = 10}
+comp2 <- log_trmb_df_ave %>% 
+  select(Time, `glu01_HvCa+ura50+nov10__trmB+ptrmB_1`, 
+         `glu01_HvCa+ura50+nov10__trmB+ptrmB_2`, 
+         `glu01_HvCa+ura50+nov10__trmB+ptrmB_3`, 
+         `glu01_HvCa+ura50+nov10_parent+ptrmB_1`, 
+         `glu01_HvCa+ura50+nov10_parent+ptrmB_2`, 
+         `glu01_HvCa+ura50+nov10_parent+ptrmB_3`, 
+         `NA_HvCa+ura50+nov10__trmB+ptrmB_1`, 
+         `NA_HvCa+ura50+nov10__trmB+ptrmB_2`, 
+         `NA_HvCa+ura50+nov10__trmB+ptrmB_3`, 
+         `NA_HvCa+ura50+nov10_parent+ptrmB_1`, 
+         `NA_HvCa+ura50+nov10_parent+ptrmB_2`, 
+         `NA_HvCa+ura50+nov10_parent+ptrmB_3`)
+
+comp2_graph <- pivot_longer(comp2, 
+                            cols = 2:(ncol(comp2)), 
+                            names_to ="type",
+                            values_to = "growth")
+
+comp2_graph['name'] = str_sub(comp2_graph$type, 1, -3)
+
+ggplot(comp2_graph, aes(x = Time, y = growth, color = name)) +
+  geom_point(size = 2)
+```
+
+```{r fig.width = 10}
+comp_plasmid <- log_trmb_df_ave %>% 
+  select(Time, `glu01_HvCa+ura50__trmB_1`, 
+         `glu01_HvCa+ura50__trmB_2`, 
+         `glu01_HvCa+ura50__trmB_3`, 
+         `glu01_HvCa+ura50+nov10__trmB+ptrmB_1`, 
+         `glu01_HvCa+ura50+nov10__trmB+ptrmB_2`, 
+         `glu01_HvCa+ura50+nov10__trmB+ptrmB_3`, 
+         `NA_HvCa+ura50__trmB_1`, 
+         `NA_HvCa+ura50__trmB_2`, 
+         `NA_HvCa+ura50__trmB_3`, 
+         `NA_HvCa+ura50+nov10__trmB+ptrmB_1`, 
+         `NA_HvCa+ura50+nov10__trmB+ptrmB_2`, 
+         `NA_HvCa+ura50+nov10__trmB+ptrmB_3`)
+
+comp_plasmid_graph <- pivot_longer(comp_plasmid, 
+                            cols = 2:(ncol(comp_plasmid)), 
+                            names_to ="type",
+                            values_to = "growth")
+
+comp_plasmid_graph['name'] = str_sub(comp_plasmid_graph$type, 1, -3)
+
+ggplot(comp_plasmid_graph, aes(x = Time, y = growth, color = name)) +
+  geom_point(size = 2)
+```
+
+```{r fig.width = 10}
+comp_plasmid2 <- log_trmb_df_ave %>% 
+  select(Time, `glu01_HvCa+ura50_parent_1`, 
+         `glu01_HvCa+ura50_parent_2`, 
+         `glu01_HvCa+ura50_parent_3`, 
+         `glu01_HvCa+ura50+nov10_parent+ptrmB_1`, 
+         `glu01_HvCa+ura50+nov10_parent+ptrmB_2`, 
+         `glu01_HvCa+ura50+nov10_parent+ptrmB_3`, 
+         `NA_HvCa+ura50_parent_1`, 
+         `NA_HvCa+ura50_parent_2`, 
+         `NA_HvCa+ura50_parent_3`, 
+         `NA_HvCa+ura50+nov10_parent+ptrmB_1`, 
+         `NA_HvCa+ura50+nov10_parent+ptrmB_2`, 
+         `NA_HvCa+ura50+nov10_parent+ptrmB_3`)
+
+comp_plasmid2_graph <- pivot_longer(comp_plasmid2, 
+                            cols = 2:(ncol(comp_plasmid2)), 
+                            names_to ="type",
+                            values_to = "growth")
+
+comp_plasmid2_graph['name'] = str_sub(comp_plasmid2_graph$type, 1, -3)
+
+ggplot(comp_plasmid2_graph, aes(x = Time, y = growth, color = name)) +
+  geom_point(size = 2)
+```
+
+
+```{r fig.width = 10}
+comp3 <- log_trmb_df_ave %>% 
+  select(Time, `glu01_HvCa+ura50+nov10__trmB+ptrmB-HA_1`, 
+         `glu01_HvCa+ura50+nov10__trmB+ptrmB-HA_2`, 
+         `glu01_HvCa+ura50+nov10__trmB+ptrmB-HA_3`, 
+         `glu01_HvCa+ura50+nov10_parent+ptrmB-HA_1`, 
+         `glu01_HvCa+ura50+nov10_parent+ptrmB-HA_2`, 
+         `glu01_HvCa+ura50+nov10_parent+ptrmB-HA_3`, 
+         `NA_HvCa+ura50+nov10__trmB+ptrmB-HA_1`, 
+         `NA_HvCa+ura50+nov10__trmB+ptrmB-HA_2`, 
+         `NA_HvCa+ura50+nov10__trmB+ptrmB-HA_3`, 
+         `NA_HvCa+ura50+nov10_parent+ptrmB-HA_1`, 
+         `NA_HvCa+ura50+nov10_parent+ptrmB-HA_2`, 
+         `NA_HvCa+ura50+nov10_parent+ptrmB-HA_3`)
+
+comp3_graph <- pivot_longer(comp3, 
+                            cols = 2:(ncol(comp3)), 
+                            names_to ="type",
+                            values_to = "growth")
+
+comp3_graph['name'] = str_sub(comp3_graph$type, 1, -3)
+
+ggplot(comp3_graph, aes(x = Time, y = growth, color = name)) +
+  geom_point(size = 2)
+```
+
+```{r growth-curver-summarize-by-plate}
+gc_output_log <- SummarizeGrowthByPlate(log_trmb_df_ave)
+gc_output_log <- gc_output_log %>%
+  select(sample, k, r, t_mid, n0)
+
+growth_vals_log <- as.data.frame(t(gc_output_log))
+colnames(growth_vals_log) = growth_vals_log[1, ]
+
+growth_vals_log = growth_vals_log[-1, ]
+```
+
+
+```{r parent-glu-model}
+gompertz_mp <- log_trmb_df_ave %>%
+  select(Time, `glu01_HvCa+ura50_parent_1`)
+
+model_gom = nlsfit(gompertz_mp, model = 10, start = c(a = 1.63, b = 0.095, c = 0.2))
+model_gom
+nlsplot(data.frame(gompertz_mp), model = 10, start = c(a = 1.466, b = 0.132, c = 0.1), xlab = "Time", ylab = "Growth", position = 1)
+```
+```{r parent-no-glu-model}
+gompertz_mp2 <- log_trmb_df_ave %>%
+  select(Time, `NA_HvCa+ura50_parent_1`)
+
+model_gom = nlsfit(gompertz_mp2, model = 10, start = c(a = 1.63, b = 3.15, c = 0.2))
+model_gom
+nlsplot(data.frame(gompertz_mp2), model = 10, start = c(a = 1.466, b = 3.15, c = 0.1), xlab = "Time", ylab = "Growth", position = 1)
+```
+
+
+```{r trmb-knockout-glu-model}
+gompertz_mt <- log_trmb_df_ave %>%
+  select(Time, `glu01_HvCa+ura50__trmB_1`)
+
+model_gom = nlsfit(gompertz_mt, model = 10, start = c(a = 1.63, b = 0.095, c = 0.2))
+model_gom
+nlsplot(data.frame(gompertz_mt), model = 10, start = c(a = 1.466, b = 0.132, c = 0.1), xlab = "Time", ylab = "Growth", position = 1)
+```
+
+```{r trmb-knockout-no-glu-model}
+gompertz_mt2 <- log_trmb_df_ave %>%
+  select(Time, `NA_HvCa+ura50__trmB_1`)
+
+model_gom = nlsfit(gompertz_mt2, model = 10, start = c(a = 1.63, b = 0.095, c = 0.2))
+model_gom
+nlsplot(data.frame(gompertz_mt2), model = 10, start = c(a = 1.466, b = 0.132, c = 0.1), xlab = "Time", ylab = "Growth", position = 1)
+```
+
+```{r modeling-plasmid}
+#gompertz
+gompertz_m1 <- log_trmb_df_ave %>%
+  select(Time, `glu01_HvCa+ura50+nov10__trmB+p_1`)
+
+model_gom = nlsfit(gompertz_m1, model = 10, start = c(a = 1.64, b = 0.08, c = 0.23))
+model_gom
+nlsplot(data.frame(gompertz_m1), model = 10, start = c(a = 1.64, b = 0.08, c = 0.23), xlab = "Time", ylab = "Growth", position = 1)
+
+#logistic
+logistic_m1 <- log_trmb_df_ave %>%
+  select(Time, `glu01_HvCa+ura50+nov10__trmB+p_1`)
+
+model_gom = nlsfit(logistic_m1, model = 7, start = c(a = 1.64, b = 0.08, c = 0.2))
+model_gom
+nlsplot(data.frame(logistic_m1), model = 7, start = c(a = 1.64, b = 0.08, c = 0.2), xlab = "Time", ylab = "Growth", position = 1)
+```
+
+```{r}
+gompertz_m2 <- log_trmb_df_ave %>%
+  select(Time, `glu01_HvCa+ura50+nov10__trmB+ptrmB_1`)
+
+model_gom = nlsfit(gompertz_m2, model = 10, start = c(a = 1.64, b = 0.08, c = 0.23))
+model_gom
+nlsplot(data.frame(gompertz_m2), model = 10, start = c(a = 1.64, b = 0.08, c = 0.23), xlab = "Time", ylab = "Growth", position = 1)
+```
+```{r}
+gompertz_m3 <- log_trmb_df_ave %>%
+  select(Time, `NA_HvCa+ura50+nov10__trmB+ptrmB_1`)
+
+model_gom = nlsfit(gompertz_m3, model = 10, start = c(a = 1.57, b = 0.08, c = 0.1))
+model_gom
+nlsplot(data.frame(gompertz_m3), model = 10, start = c(a = 1.57, b = 0.08, c = 0.1), xlab = "Time", ylab = "Growth", position = 1)
+```
+
+
+```{r}
+library("readr")
+write.csv(trmb_data_not_blank, "trmb_data.csv")
+write.csv(renamed_meta_not_blank, "trmb_meta.csv")
+```
+
+```{r}
+library("readr")
+write.csv(output, "trmb_meta2.csv")
+```
+
+

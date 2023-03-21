@@ -1,0 +1,34 @@
+---
+title: "trmB-oxidative-stress"
+output: html_document
+---
+
+```{r setup, include = FALSE, echo = FALSE, warning = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loadpackages}
+library(minpack.lm)
+library(ggplot2)
+library(tidyverse)
+library(knitr)
+library(Stat2Data)
+library(growthcurver)
+library(epifitter)
+library(nlstools)
+library(nlsMicrobio)
+library(easynls)
+library(numDeriv)
+```
+
+```{r import-data-file}
+trmB_stress <- read_excel("~/Desktop/data+/trmB_oxidativeStress.xls")
+```
+
+```{r}
+trmB_stress_new <- trmB_stress %>%
+  select(-c("Media", "mM PQ"))
+```
+
+
+

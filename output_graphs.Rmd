@@ -1,0 +1,494 @@
+---
+title: "Reproducible Data Visualization Pipeline for GP Model"
+author: "Duke Schmid Lab"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      error = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      results='hide')
+```
+
+```{r loadpackages}
+library(minpack.lm)
+library(ggplot2)
+library(tidyverse)
+library(knitr)
+library(Stat2Data)
+library(growthcurver)
+library(epifitter)
+library(nlstools)
+library(nlsMicrobio)
+library(easynls)
+library(numDeriv)
+library(readr)
+library(hrbrthemes)
+library(viridis)
+library(plotly)
+library(reshape2)
+library(gplots)
+```
+
+```{r import-data}
+model_output <- read_csv("~/Desktop/data+/trmB_phenom_data.csv")
+model_input <- read_csv("~/Desktop/data+/trmb_input_data.csv")
+meta_file <- read_csv("~/Desktop/data+/trmb_meta_input.csv")
+
+model_output <- model_output[,-1]
+```
+```{r}
+meta_file <- meta_file %>%
+  mutate(condition = str_replace(condition, "glu00", "NA"))
+
+model_output <- model_output %>%
+  mutate(condition = str_replace(condition, "glu00", "NA"))
+
+model_output <- model_output %>%
+  arrange(condition, name)
+```
+
+```{r basic parameters}
+unique_strains <- unique(meta_file$name)
+num_strain <- length(unique(meta_file$name))
+unique_condition <- unique(meta_file$condition)
+num_batch <- length(unique(meta_file$BATCH))
+num_fixed_effects <- ncol(meta_file) - 1
+
+unique_strains
+num_strain
+unique_condition
+num_batch
+```
+
+```{r colors}
+colors <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "purple", "brown", "blue", "green", "red", "yellow", "black", "orange", "grey")
+```
+
+```{r gaussian-model-growth-fit}
+graph_function <- function(output, input, x){
+    batch = num_batch
+    every_row <- output[x+1,]
+  
+    #delete name and condition columns so the df can be flipped
+    every_row <- every_row %>%
+    select(-c(1:num_fixed_effects))
+  
+    #flip df
+    every_row_flip <- as.data.frame(t(every_row))
+  
+    #add mean and time columns
+    new_col = c("Mean")
+    colnames(every_row_flip) = new_col
+    add_time = c(input$Time)
+    every_row_flip['Time'] = rep(add_time, 2)
+  
+    #extract only mean values
+    mean_data <- every_row_flip %>%
+    slice(1:(nrow(every_row_flip)/2))
+
+    #extract only std values
+    sd_data <- every_row_flip %>%
+    slice(((nrow(every_row_flip)/2)+1):nrow(every_row_flip))
+
+    #add std and time columns
+    new_col = c("std", "Time")
+    colnames(sd_data) = new_col
+
+    #join mean and std dfs
+    graph_data <- left_join(mean_data, sd_data)
+    
+    title_name = output[x+1, 1]
+    
+    for(i in 2:num_fixed_effects){
+      title_name <- paste(title_name, output[x+1, i], sep = " + ")
+    }
+    
+    gPlot <- ggplot(graph_data, aes(x = Time, y = Mean)) +
+      geom_ribbon(aes(ymin = Mean - std*2, ymax = Mean + std*2), alpha = 0.3) +
+      geom_line() +
+      labs(x = "Time (hours)",
+           y = "log(OD)",
+           title = title_name) +
+      theme_classic()
+    
+    if(batch == 1){
+    gPlot <- gPlot +
+      geom_point(data = model_input, mapping = aes(x = Time, 
+                                                   y = get(names(input)[x*batch+2])),
+                                                   color = colors[1])
+    }
+    
+    if(batch == 2){
+    gPlot <- gPlot +
+      geom_point(data = model_input, mapping = aes(x = Time, 
+                                                   y = get(names(model_input)[x*batch+2])),
+                 color = colors[1]) +
+      geom_point(data = model_input, mapping = aes(x = Time, 
+                                                   y = get(names(model_input)[x*batch+3])),
+                 color = colors[2])
+    }
+    
+    if(batch == 3){
+    gPlot <- gPlot +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+2])),
+                 color = colors[1]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+3])),
+                 color = colors[2]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+4])),
+                 color = colors[3])
+    }
+    
+    if(batch == 4){
+    gPlot <- gPlot +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+2])),
+                 color = colors[1]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+3])),
+                 color = colors[2]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+4])),
+                 color = colors[3]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+5])),
+                 color = colors[4])
+    }
+    
+    if(batch == 5){
+    gPlot <- gPlot +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+2])),
+                 color = colors[1]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+3])),
+                 color = colors[2]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+4])),
+                 color = colors[3]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+5])),
+                 color = colors[4]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+6])),
+                 color = colors[5])
+    }
+    
+    if(batch == 6){
+    gPlot <- gPlot +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+2])),
+                 color = colors[1]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+3])),
+                 color = colors[2]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+4])),
+                 color = colors[3]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+5])),
+                 color = colors[4]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+6])),
+                 color = colors[5]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+7])),
+                 color = colors[6]) 
+    }
+    
+    if(batch == 7){
+    gPlot <- gPlot +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+2])),
+                 color = colors[1]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+3])),
+                 color = colors[2]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+4])),
+                 color = colors[3]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+5])),
+                 color = colors[4]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+6])),
+                 color = colors[5]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+7])),
+                 color = colors[6]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+8])),
+                 color = colors[7]) 
+    }
+    
+    if(batch == 8){
+    gPlot <- gPlot +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+2])),
+                 color = colors[1]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+3])),
+                 color = colors[2]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+4])),
+                 color = colors[3]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+5])),
+                 color = colors[4]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+6])),
+                 color = colors[5]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+7])),
+                 color = colors[6]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+8])),
+                 color = colors[7]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+9])),
+                 color = colors[8]) 
+    }
+    
+    if(batch == 9){
+    gPlot <- gPlot +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+2])),
+                 color = colors[1]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+3])),
+                 color = colors[2]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+4])),
+                 color = colors[3]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+5])),
+                 color = colors[4]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+6])),
+                 color = colors[5]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+7])),
+                 color = colors[6]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+8])),
+                 color = colors[7]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+9])),
+                 color = colors[8]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+10])),
+                 color = colors[9]) 
+    }
+    
+    if(batch == 10){
+    gPlot <- gPlot +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+2])),
+                 color = colors[1]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+3])),
+                 color = colors[2]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+4])),
+                 color = colors[3]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+5])),
+                 color = colors[4]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+6])),
+                 color = colors[5]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+7])),
+                 color = colors[6]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+8])),
+                 color = colors[7]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+9])),
+                 color = colors[8]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+10])),
+                 color = colors[9]) +
+      geom_point(data = model_input, mapping = aes(x = Time, y = get(names(model_input)[x*batch+11])),
+                 color = colors[10]) 
+    }
+    
+    return(print(gPlot))
+}
+```
+
+```{r fig.show="hold", out.width="50%"}
+output_graphs <- function(output, input){
+  x = 0
+  batch = num_batch
+  while(x < nrow(output)){
+    graph_function(output, input, x)
+    x <- x + 1
+  }
+}
+
+output_graphs(model_output, model_input)
+```
+
+\newpage
+
+```{r}
+model_output <- read_csv("~/Desktop/data+/3_25_data.csv")
+model_input <- read_csv("~/Desktop/data+/3_25.csv")
+meta_file <- read_csv("~/Desktop/data+/meta_3_25.csv")
+
+model_output <- model_output[,-1]
+```
+```{r}
+unique_strains <- unique(meta_file$name)
+num_strain <- length(unique(meta_file$name))
+
+unique_condition <- unique(meta_file$condition)
+num_condition <- length(unique(meta_file$condition))
+
+num_batch <- length(unique(meta_file$BATCH))
+num_fixed_effects <- ncol(meta_file) - 1
+p_index = 0
+
+
+for(i in 1:num_strain){
+  if(unique_strains[i] == "pyrE"){
+    p_index = i
+  }
+}
+
+unique_strains
+num_strain
+unique_condition
+num_condition
+num_batch
+p_index
+```
+
+
+```{r}
+od_graph_data_func <- function(od_data){
+  od_data <- od_data %>%
+  select(-condition)
+
+  od_data_flip <- as.data.frame(t(od_data))
+
+  new_col = c(od_data_flip[1, ][])
+  colnames(od_data_flip) = new_col
+  od_data_flip <- od_data_flip[-1,]
+
+  od_data_flip <- od_data_flip %>% mutate_if(is.character,as.numeric)
+  
+  od_data_flip <- cbind(rownames(od_data_flip), data.frame(od_data_flip, row.names=NULL))
+  
+  add_time = c(model_input$Time)
+  od_data_flip <- od_data_flip %>%
+  mutate(Time = rep(add_time,2))
+
+  od_mean_data <- od_data_flip %>%
+  slice(1:(nrow(od_data_flip)/2))
+
+  od_sd_data <- od_data_flip %>%
+  slice(((nrow(od_data_flip)/2)+1):nrow(od_data_flip))
+
+  od_sd_data <- od_sd_data[,-1]
+  
+  od_new_col = c()
+  for(i in 1:num_strain){
+    od_new_col[length(od_new_col) + 1] = paste("sd_", unique_strains[i])
+  }
+  od_new_col[length(od_new_col) + 1] = "Time"
+
+  colnames(od_sd_data) <- od_new_col
+
+  od_graph <- left_join(od_mean_data, od_sd_data)
+  
+  #create a new data set to graph the od difference
+  for(i in 1:num_strain){
+    if(i != (p_index)){
+    temp_df = paste(unique_strains[i], "_df")
+    temp_sd = paste(unique_strains[i], "_sd")
+    od_graph[`temp_df`] = od_graph[i+1] - od_graph[p_index + 1]
+    od_graph[`temp_sd`] = sqrt((od_graph[i + num_strain + 2])^2 + 
+                                                       (od_graph[p_index + num_strain + 2])^2)
+    }
+  else{
+    od_graph["diff"] = od_graph[p_index + 1] - od_graph[p_index + 1]
+      }
+  }
+  
+  od_graph_data <- od_graph[,c(num_strain+2, (num_strain*2+3):ncol(od_graph))]
+
+  od_graph_data <- od_graph_data %>%
+  select(-diff)
+  
+  return(od_graph_data)
+  }
+```
+
+```{r}
+return_graph <- function(od_graph_data, count, min_max, condition_name){
+  strain_name <- colnames(od_graph_data)[count]
+  strain_name <- substr(strain_name, 0, nchar(strain_name)-3)
+  condition_strain <- paste(condition_name, strain_name, sep = " + ")
+  title_var <- paste("Functional OD difference", condition_strain)
+  od_Plot <- ggplot(od_graph_data, aes(x = Time, y = od_graph_data[, count])) +
+        geom_ribbon(aes(ymin = od_graph_data[, count] - (od_graph_data[, count+1])*2, ymax = od_graph_data[, count] + (od_graph_data[, count+1])*2), alpha = 0.2) +
+        geom_line(color = "blue", size = 1) +
+        geom_hline(yintercept = 0, size = 2) +
+        labs(x = "Time (hours)",
+             y = "log(OD)",
+             title = `title_var`) +
+        ylim(min_max[1]-0.05, min_max[2]+0.05)
+      return(print(od_Plot))
+}
+```
+
+
+```{r}
+od_graph_function <- function(od_graph_data, min_max, condition_name){
+  count = 2
+  while(count <= ncol(od_graph_data)){
+    return_graph(od_graph_data, count, min_max, condition_name)
+    count <- count + 2
+  }
+}
+```
+
+```{r}
+calc_min_max <- function(output){
+  row = 1
+  max = -100.0
+  min = 100.0
+  while(row <= nrow(output)){
+    od_data <- output[(row : (row + num_strain - 1)), ]
+    od_graph_data <- od_graph_data_func(od_data)
+    
+    temp_od_graph_data <- od_graph_data[,grepl("df", colnames(od_graph_data))]
+    
+    current_max <- max(unlist(temp_od_graph_data))
+    current_min <- min(unlist(temp_od_graph_data))
+    
+    if(current_max >= max){
+      max <- current_max
+    }
+    
+    if(current_min <= min){
+      min <- current_min
+    }
+    
+    row <- row + num_strain
+  }
+  return(c(min, max))
+}
+```
+
+```{r fig.height=8, fig.show="hold", out.width="33%"}
+od_final_graph_function <- function(output){
+  min_max <- calc_min_max(output)
+  row = 1
+  while(row <= nrow(output)){
+    condition = output$condition[row]
+    od_data <- output[(row : (row + num_strain - 1)), ]
+    condition_name = od_data$condition[1]
+    od_graph_data <- od_graph_data_func(od_data)
+    od_graph_function(od_graph_data, min_max, condition)
+    row <- row + num_strain
+  }
+}
+
+od_final_graph_function(model_output)
+```
+
+\newpage
+
+```{r}
+print_heatmap <- function(od_graph_heat, condition){
+  title_name = paste("Heatmap - ", condition)
+  heatmapPlot <- heatmap.2(as.matrix(od_graph_heat), Colv = NA,
+           key.xlab = expression(paste("OD",Delta)), key=TRUE, symkey=FALSE, adjRow = c(0.2,NA),
+          cexRow = 0.8, main = `title_name`, xlab = "Time (hours)", 
+          ylab = "Strains", density.info="none", trace="none")
+  return(print(heatmapPlot))
+}
+```
+
+```{r fig.show="hold", out.width="50%"}
+heatmap_graph <- function(output){
+  row = 1
+  while(row <= nrow(output)){
+    condition = output$condition[row]
+    od_data <- output[(row : (row + num_strain - 1)), ]
+    od_graph_data <- od_graph_data_func(od_data)
+    
+    od_graph_heat <- od_graph_data %>%
+      select(Time, contains("df")) 
+    #convert column values into row names
+    od_graph_heat <- data.frame(od_graph_heat[,-1, drop = FALSE], row.names = od_graph_heat[,1])
+
+    od_graph_heat <- as.data.frame(t(od_graph_heat))
+    
+    print_heatmap(od_graph_heat, condition)
+    
+    row <- row + num_strain
+  }
+}
+
+heatmap_graph(model_output)
+```
+
